@@ -1,0 +1,129 @@
+services:
+{%- if cookiecutter.database == "postgresql" %}
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - {{ cookiecutter.project_slug }}
+{%- endif %}
+
+  # Django Web Application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: daphne -b 0.0.0.0 -p 8000 config.asgi:application
+    volumes:
+      - .:/app
+      - /app/.venv
+      - /app/htmlcov
+      - static_volume:/app/staticfiles
+      - data_volume:/app/data
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/db.sqlite3}
+      - DEBUG=${DEBUG:-False}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+{%- if cookiecutter.database == "postgresql" %}
+    depends_on:
+      db:
+        condition: service_healthy
+{%- endif %}
+    networks:
+      - {{ cookiecutter.project_slug }}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+{%- if cookiecutter.use_huey == "yes" %}
+  # Huey Task Queue Worker
+  huey:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python manage.py run_huey
+    volumes:
+      - .:/app
+      - /app/.venv
+      - data_volume:/app/data
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/db.sqlite3}
+    healthcheck:
+      disable: true
+    depends_on:
+      - web
+    networks:
+      - {{ cookiecutter.project_slug }}
+    restart: unless-stopped
+{%- endif %}
+
+  # Nginx (Static/Media file serving)
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1337:80"
+    volumes:
+      - media_volume:/app/media
+      - ./.nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:80/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - {{ cookiecutter.project_slug }}
+
+{%- if cookiecutter.use_mailpit == "yes" %}
+  mailpit:
+    image: axllent/mailpit
+    container_name: mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - {{ cookiecutter.project_slug }}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8025/api/v1/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+{%- endif %}
+
+volumes:
+{%- if cookiecutter.database == "postgresql" %}
+  postgres_data:
+{%- endif %}
+  static_volume:
+  media_volume:
+  data_volume:
+
+networks:
+  {{ cookiecutter.project_slug }}:
+    driver: bridge

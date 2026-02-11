@@ -1,0 +1,45 @@
+{
+    "project_name": "My Django Project",
+    "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '_').replace('-', '_') }}",
+    "project_description": "A Django project built with modern best practices",
+    "author_name": "Your Name",
+    "author_email": "[email protected]",
+    "django_version": "5.2.7",
+    "python_version": "3.12",
+    "use_rest_framework": [
+        "yes",
+        "no"
+    ],
+    "use_docker": [
+        "yes",
+        "no"
+    ],
+    "use_huey": [
+        "no",
+        "yes"
+    ],
+    "use_mailpit": [
+        "yes",
+        "no"
+    ],
+    "timezone": "UTC",
+    "include_accounts_app": [
+        "yes",
+        "no"
+    ],
+    "database": [
+        "postgresql",
+        "sqlite"
+    ],
+    "use_ci_cd": [
+        "github_actions",
+        "gitlab_ci",
+        "none"
+    ],
+    "_copy_without_render": [
+        "*.pyc",
+        "__pycache__",
+        "*.sqlite3",
+        ".git"
+    ]
+}
