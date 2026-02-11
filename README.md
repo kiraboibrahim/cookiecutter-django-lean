@@ -7,6 +7,14 @@ A modern, production-ready Django project template with sensible defaults and op
 [![Cookiecutter](https://img.shields.io/badge/cookiecutter-2.6.0+-orange.svg)](https://github.com/cookiecutter/cookiecutter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## Philosophy
+
+This template was created with a simple goal: **maintain Django's default project structure while providing the tools needed for production-grade applications**.
+
+Unlike other templates that heavily restructure Django's layout, cookiecutter-django-lean respects Django's conventions and the familiar `django-admin startproject` structure. It adds modern tooling, optional integrations, and production best practices without forcing you to learn a new project organization.
+
+Perfect for developers who want a clean starting point that feels like Django, not a framework on top of Django.
+
 ## Features
 
 ### Core Stack
@@ -292,7 +300,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Credits
 
-Created and maintained by [Your Name](mailto:your.email@example.com)
+Created and maintained by [Ibrahim Kirabo](https://github.com/kiraboibrahim)
 
 Inspired by:
 - [cookiecutter-django](https://github.com/cookiecutter/cookiecutter-django)
