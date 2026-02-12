@@ -28,7 +28,7 @@ superuser:
 	$(MANAGE) createsuperuser
 
 test:
-	$(EXEC) pytest
+	$(DC) run --rm test pytest
 
 shell:
 	$(MANAGE) shell

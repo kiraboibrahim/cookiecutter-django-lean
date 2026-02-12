@@ -13,12 +13,14 @@ dependencies = [
     "django-cors-headers>=4.3.0",
     "dj-rest-auth>=7.0.1",
     "djangorestframework-simplejwt>=5.5.1",
+    "drf-yasg>=1.21.8",
 {%- endif %}
     "django-model-utils>=5.0.0",
     "django-guardian>=3.2.0",
 {%- if cookiecutter.use_huey == "yes" %}
     "huey>=2.5.0",
 {%- endif %}
+    "python-dotenv>=1.2.1",
 ]
 name = "{{ cookiecutter.project_slug }}"
 version = "0.1.0"
@@ -86,7 +88,7 @@ addopts = [
     "--cov=.",
     "--cov-report=term-missing",
     "--cov-report=html",
-    "--cov-report=xml",
+    "--cov-report=xml:htmlcov/coverage.xml",
 ]
 markers = [
     "slow: marks tests as slow",
@@ -96,6 +98,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["."]
+data_file = ".coverage_data/.coverage"
 omit = [
     "*/migrations/*",
     "*/tests/*",

@@ -159,6 +159,8 @@ The Docker Compose setup includes the following services:
 {%- endif %}
 - **nginx**: Reverse proxy for static/media files
   - Port: `1337` (bound to 127.0.0.1)
+- **test**: Dedicated test environment (with profile `test`)
+  - Entrypoint: `pytest`
 {%- if cookiecutter.use_mailpit == "yes" %}
 - **mailpit**: Email testing interface
   - Web UI: `http://localhost:8025`
@@ -205,11 +207,19 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 
 {%- if cookiecutter.database == "postgresql" %}
 ```bash
-# PostgreSQL
-DATABASE_URL=postgresql://user:password@localhost:5432/{{ cookiecutter.project_slug }}
+# PostgreSQL individual variables
+DB_NAME={{ cookiecutter.project_slug }}
+DB_USER=user
+DB_PASSWORD=password
+DB_HOST=localhost
+DB_PORT=5432
+
+# Final connection URL (used by Django)
+DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
 
 # Or with Docker
-DATABASE_URL=postgresql://user:password@db:5432/{{ cookiecutter.project_slug }}
+DB_HOST=db
+DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
 ```
 {%- else %}
 ```bash
@@ -263,7 +273,7 @@ CSRF_TRUSTED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 make test
 
 # Or directly
-docker compose exec web pytest
+docker compose run --rm test pytest
 {%- endif %}
 
 # Without Docker
@@ -420,6 +430,12 @@ uv run python manage.py shell
 ### Health Check
 - `GET /health/` - Application health status (returns "OK")
 
+{%- if cookiecutter.use_rest_framework == "yes" %}
+### API Documentation
+- `GET /api/swagger/` - Swagger UI documentation
+- `GET /api/redoc/` - ReDoc documentation
+{%- endif %}
+
 ### Admin
 - `/admin/` - Django admin interface
 
@@ -512,9 +528,10 @@ git commit --no-verify
 {%- if cookiecutter.use_rest_framework == "yes" %}
 | `CORS_ALLOWED_ORIGINS` | CORS origins (comma-separated) | No | - |
 | `CSRF_TRUSTED_ORIGINS` | CSRF origins (comma-separated) | No | - |
+| `JWT_AUTH_SAMESITE` | SameSite attribute for JWT cookies | No | `Lax` |
+| `JWT_AUTH_SECURE` | Use secure cookies (HTTPS only) | No | `False` |
 {%- endif %}
 {%- if cookiecutter.database == "postgresql" and cookiecutter.use_docker == "yes" %}
-| `POSTGRES_PORT` | PostgreSQL host port | No | `5432` |
 {%- endif %}
 
 ## Contributing

@@ -28,6 +28,8 @@ services:
       - .:/app
       - /app/.venv
       - /app/htmlcov
+      - /app/.pytest_cache
+      - /app/.coverage_data
       - static_volume:/app/staticfiles
       - data_volume:/app/data
     ports:
@@ -63,6 +65,8 @@ services:
     volumes:
       - .:/app
       - /app/.venv
+      - /app/.pytest_cache
+      - /app/.coverage_data
       - data_volume:/app/data
     env_file:
       - .env
@@ -95,6 +99,33 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - {{ cookiecutter.project_slug }}
+
+  # Test Service
+  test:
+    profiles:
+      - test
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    volumes:
+      - .:/app
+      - /app/.venv
+      - /app/htmlcov
+      - /app/.pytest_cache
+      - /app/.coverage_data
+      - data_volume:/app/data
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/db.sqlite3}
+{%- if cookiecutter.database == "postgresql" %}
+    depends_on:
+      db:
+        condition: service_healthy
+{%- endif %}
     networks:
       - {{ cookiecutter.project_slug }}
 

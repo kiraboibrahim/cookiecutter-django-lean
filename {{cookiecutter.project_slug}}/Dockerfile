@@ -37,7 +37,9 @@ WORKDIR /app
 COPY --from=test-builder /venv /venv
 ENV PATH="/venv/bin:$PATH"
 COPY --from=test-builder /app /app
-ENTRYPOINT ["pytest"]
+RUN cp /app/entrypoint.sh /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["sh", "/usr/local/bin/entrypoint.sh"]
+CMD ["pytest"]
 
 # Stage 6: Production Runtime (Uses prod-builder venv)
 FROM python:3.12-slim-bookworm AS production
@@ -52,7 +54,7 @@ RUN apt-get update && \
 COPY --from=prod-builder /venv /venv
 ENV PATH="/venv/bin:$PATH"
 COPY --from=prod-builder /app /app
-RUN chmod +x /app/entrypoint.sh
-ENTRYPOINT ["/app/entrypoint.sh"]
+RUN cp /app/entrypoint.sh /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["sh", "/usr/local/bin/entrypoint.sh"]
 EXPOSE 8000
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
