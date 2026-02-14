@@ -130,7 +130,7 @@ def initialize_git() -> None:
     
     if run_command("git add .", "Failed to stage files"):
         run_command(
-            'git commit -m "Initial commit from cookiecutter template"',
+            'git commit -m "Initial commit"',
             "Failed to create initial commit"
         )
         print_success("Initial commit created")
