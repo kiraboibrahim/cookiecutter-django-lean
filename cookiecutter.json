@@ -15,8 +15,8 @@
         "no"
     ],
     "use_huey": [
-        "no",
-        "yes"
+        "yes",
+        "no"
     ],
     "use_mailpit": [
         "yes",
@@ -30,11 +30,6 @@
     "database": [
         "postgresql",
         "sqlite"
-    ],
-    "use_ci_cd": [
-        "github_actions",
-        "gitlab_ci",
-        "none"
     ],
     "_copy_without_render": [
         "*.pyc",
