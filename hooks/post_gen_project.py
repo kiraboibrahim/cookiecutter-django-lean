@@ -120,6 +120,91 @@ def remove_docker_files() -> None:
             print_success(f"Removed {directory}/")
 
 
+def remove_unused_vcs_files() -> None:
+    """Remove CI/CD files for the VCS that wasn't selected."""
+    vcs = "{{ cookiecutter.vcs }}"
+    if vcs == "github":
+        gitlab_file = Path(".gitlab-ci.yml")
+        if gitlab_file.exists():
+            gitlab_file.unlink()
+            print_success("Removed .gitlab-ci.yml (VCS=github)")
+    elif vcs == "gitlab":
+        github_dir = Path(".github")
+        if github_dir.exists() and github_dir.is_dir():
+            shutil.rmtree(github_dir)
+            print_success("Removed .github/ (VCS=gitlab)")
+    elif vcs == "none":
+        gitlab_file = Path(".gitlab-ci.yml")
+        github_dir = Path(".github")
+        if gitlab_file.exists():
+            gitlab_file.unlink()
+            print_success("Removed .gitlab-ci.yml (VCS=none)")
+        if github_dir.exists() and github_dir.is_dir():
+            shutil.rmtree(github_dir)
+            print_success("Removed .github/ (VCS=none)")
+
+
+def generate_env_test() -> None:
+    """
+    Generate .env.test file based on required variables in settings.py.
+    """
+    print_info("Generating .env.test...")
+    settings_path = Path("config/settings.py")
+    env_example_path = Path(".env.example")
+    env_test_path = Path(".env.test")
+
+    if not settings_path.exists():
+        print_warning("config/settings.py not found, skipping .env.test generation")
+        return
+
+    # 1. Identify required variables from settings.py (config calls without defaults)
+    import re
+    required_vars = []
+    with open(settings_path, "r") as f:
+        content = f.read()
+        # Find matches like: config("VAR_NAME") or config('VAR_NAME')
+        # ensuring no 'default=' is present in the call
+        matches = re.finditer(r'config\(\s*["\']([^"\']+)["\']\s*(?:,[^)]*)?\)', content)
+        for match in matches:
+            full_call = match.group(0)
+            var_name = match.group(1)
+            if "default=" not in full_call:
+                required_vars.append(var_name)
+
+    # 2. Extract values from .env.example if available
+    example_values = {}
+    if env_example_path.exists():
+        with open(env_example_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and "=" in line and not line.startswith("#"):
+                    key, val = line.split("=", 1)
+                    example_values[key.strip()] = val.strip()
+
+    # 3. Create .env.test
+    with open(env_test_path, "w") as f:
+        f.write("# Environment variables for testing\n")
+        f.write("# Generated automatically from settings.py required variables\n\n")
+        f.write("DEBUG=False\n")
+        f.write("ALLOWED_HOSTS=localhost,127.0.0.1\n")
+        
+        # Override DATABASE_URL for testing if possible, or just use what's in example
+        for var in required_vars:
+            if var in ["DEBUG", "ALLOWED_HOSTS"]: continue
+            
+            val = example_values.get(var, "change-me")
+            
+            # Special logic for certain test Vars
+            if var == "SECRET_KEY":
+                val = "django-insecure-test-key-for-ci-logic-only"
+            elif var == "DATABASE_URL":
+                val = "sqlite:///data/test_db.sqlite3"
+            
+            f.write(f"{var}={val}\n")
+
+    print_success(".env.test generated successfully")
+
+
 def initialize_git() -> None:
     """Initialize git repository with initial commit."""
     print_info("Initializing git repository...")
@@ -248,8 +333,10 @@ def main() -> None:
     
     remove_unselected_apps()
     remove_docker_files()
+    remove_unused_vcs_files()
     initialize_git()
     create_env_file()
+    generate_env_test()
     
     uv_success = setup_uv()
     
