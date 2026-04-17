@@ -19,6 +19,13 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import path
 
+{%- if cookiecutter.use_rest_framework == "yes" %}
+from rest_framework import permissions
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+from django.urls import include
+{%- endif %}
+
 def health_check(request):
     return HttpResponse("OK")
 
@@ -28,11 +35,6 @@ urlpatterns = [
 ]
 
 {%- if cookiecutter.use_rest_framework == "yes" %}
-from rest_framework import permissions
-from drf_yasg.views import get_schema_view
-from drf_yasg import openapi
-from django.urls import include
-
 schema_view = get_schema_view(
     openapi.Info(
         title="{{ cookiecutter.project_name }} API",

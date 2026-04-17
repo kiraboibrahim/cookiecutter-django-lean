@@ -44,6 +44,9 @@ test = [
     "faker>=22.0.0",
 ]
 
+[tool.setuptools]
+packages = ["config", "accounts"]
+
 [tool.ruff]
 target-version = "py{{ cookiecutter.python_version.replace('.', '') }}"
 line-length = 88
@@ -81,7 +84,7 @@ skips = ["B308", "B703"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
-testpaths = ["tests"]
+testpaths = ["."]
 addopts = [
     "--strict-markers",
     "--strict-config",
