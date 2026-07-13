@@ -64,6 +64,7 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    "config",
 {%- if cookiecutter.include_accounts_app == "yes" %}
     "accounts",
 {%- endif %}
@@ -114,7 +115,11 @@ if IS_TESTING:
         }
     }
 else:
-    DATABASES = {"default": dj_database_url.parse(config("DATABASE_URL"))}
+    DATABASES = {
+        "default": dj_database_url.parse(
+            config("DATABASE_URL", default="sqlite:///data/db.sqlite3")
+        )
+    }
     if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
         DATABASES["default"]["NAME"] = BASE_DIR / "data" / "db.sqlite3"
 
@@ -223,6 +228,7 @@ HUEY = {
     "store_none": False,  # If a task returns None, do not save to results.
     "utc": True,  # Use UTC for all times internally.
     "filename": BASE_DIR / "data" / "huey.sqlite3",
+    "immediate": IS_TESTING,
     "consumer": {
         "workers": 2,
         "worker_type": "thread",

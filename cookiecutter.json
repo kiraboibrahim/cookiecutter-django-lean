@@ -28,8 +28,8 @@
         "no"
     ],
     "database": [
-        "postgresql",
-        "sqlite"
+        "sqlite",
+        "postgresql"
     ],
     "vcs": [
         "github",
