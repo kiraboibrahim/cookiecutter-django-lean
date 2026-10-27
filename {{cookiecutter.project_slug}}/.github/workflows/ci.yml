@@ -1,12 +1,16 @@
-name: Linting, Testing and Deploy
+name: Linting, Testing and Docker Build
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - "v*.*.*"
 
 jobs:
   lint:
@@ -17,19 +21,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "{{ cookiecutter.python_version }}"
-          cache: "pip"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          uv sync --frozen --extra dev
+
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${%raw%}{{ runner.os }}{%endraw%}-${%raw%}{{ hashFiles('.pre-commit-config.yaml') }}{%endraw%}
+          restore-keys: |
+            pre-commit-${%raw%}{{ runner.os }}{%endraw%}-
 
       - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.1
+        run: uv run pre-commit run --all-files
 
   test:
     runs-on: ubuntu-latest
@@ -48,8 +59,8 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
+          --health-interval 5s
+          --health-timeout 3s
           --health-retries 5
     {%- endif %}
 
@@ -57,17 +68,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "{{ cookiecutter.python_version }}"
-          cache: "pip"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test]"
-          pip install -e "."
+          uv sync --frozen --extra test
 
       - name: Copy test environment file
         run: |
@@ -82,22 +91,86 @@ jobs:
           {%- endif %}
           SECRET_KEY: github_actions_dummy_secret_key_12345
         run: |
-          pytest
+          uv run pytest
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
           flags: unittests
+          name: codecov-umbrella
           fail_ci_if_error: false
         if: always()
 
+  {%- if cookiecutter.use_docker == "yes" %}
+  build:
+    runs-on: ubuntu-latest
+    name: Build and Push Docker Image
+    needs: [lint, test]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${%raw%}{{ github.actor }}{%endraw%}
+          password: ${%raw%}{{ secrets.GITHUB_TOKEN }}{%endraw%}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${%raw%}{{ github.repository }}{%endraw%}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={%raw%}{{version}}{%endraw%}
+            type=semver,pattern={%raw%}{{major}}.{{minor}}{%endraw%}
+            type=raw,value=latest,enable={%raw%}{{is_default_branch}}{%endraw%}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: production
+          push: true
+          tags: ${%raw%}{{ steps.meta.outputs.tags }}{%endraw%}
+          labels: ${%raw%}{{ steps.meta.outputs.labels }}{%endraw%}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: Release ${%raw%}{{ github.ref_name }}{%endraw%}
+          body: |
+            Docker Image: `ghcr.io/${%raw%}{{ github.repository }}{%endraw%}:${%raw%}{{ github.ref_name }}{%endraw%}`
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+  {%- endif %}
+
   {%- if cookiecutter.deploy_to_vps == "yes" %}
   deploy:
-    name: Deploy to VPS
-    needs: test
+    name: Deploy to Production VPS
+    {%- if cookiecutter.use_docker == "yes" %}
+    needs: build
+    {%- else %}
+    needs: [lint, test]
+    {%- endif %}
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    environment: production
     steps:
       - name: Execute Remote Deploy Script via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -112,12 +185,9 @@ jobs:
           script: |
             set -e
             echo "Starting continuous deployment..."
-
-            # Ensure the deployment directory exists
             mkdir -p /home/ubuntu/{{ cookiecutter.project_slug }}
             cd /home/ubuntu/{{ cookiecutter.project_slug }}
 
-            # Initialize the repository if it's missing or corrupted
             if [ ! -d ".git" ]; then
               echo "VCS directory not found. Initializing repository..."
               git init
@@ -126,34 +196,69 @@ jobs:
               git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git
             fi
 
-            # Fetch and reset
             git fetch origin main
             git reset --hard origin/main
 
-            # Verify mandatory files exist before proceeding
-            if [ ! -f "docker-compose.yml" ]; then
-              echo "CRITICAL ERROR: docker-compose.yml not found in $(pwd)"
-              exit 1
-            fi
-
             {%- if cookiecutter.use_docker == "yes" %}
-            # Rebuild and restart services with cleanup to save space
-            echo "Pruning old Docker data to clear space..."
-            docker system prune -f
-
-            echo "Building and starting containers..."
-            docker compose up -d --build
-
-            # Administrative tasks
-            echo "Running migrations and collecting static files..."
+            echo "Pulling latest Docker image and starting services..."
+            docker compose pull || docker compose up -d --build
+            docker compose up -d
             docker compose exec -T web python manage.py migrate
             docker compose exec -T web python manage.py collectstatic --noinput
-
             {%- if cookiecutter.use_huey == "yes" %}
-            echo "Restarting background worker..."
             docker compose restart huey
             {%- endif %}
             {%- endif %}
 
             echo "Deployment Pipeline Complete!"
+
+  deploy-staging:
+    name: Deploy to Staging VPS
+    {%- if cookiecutter.use_docker == "yes" %}
+    needs: build
+    {%- else %}
+    needs: [lint, test]
+    {%- endif %}
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev'
+    environment: staging
+    steps:
+      - name: Execute Remote Deploy Script via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GITHUB_TOKEN: ${%raw%}{{ secrets.GITHUB_TOKEN }}{%endraw%}
+          REPO: ${%raw%}{{ github.repository }}{%endraw%}
+        with:
+          host: ${%raw%}{{ secrets.STAGING_VPS_IP }}{%endraw%}
+          username: ubuntu
+          key: ${%raw%}{{ secrets.STAGING_SSH_PRIVATE_KEY }}{%endraw%}
+          envs: GITHUB_TOKEN,REPO
+          script: |
+            set -e
+            echo "Starting staging deployment..."
+            mkdir -p /home/ubuntu/{{ cookiecutter.project_slug }}
+            cd /home/ubuntu/{{ cookiecutter.project_slug }}
+
+            if [ ! -d ".git" ]; then
+              git init
+              git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git || true
+            else
+              git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git
+            fi
+
+            git fetch origin dev
+            git reset --hard origin/dev
+
+            {%- if cookiecutter.use_docker == "yes" %}
+            echo "Pulling latest Docker image and starting services..."
+            docker compose pull || docker compose up -d --build
+            docker compose up -d
+            docker compose exec -T web python manage.py migrate
+            docker compose exec -T web python manage.py collectstatic --noinput
+            {%- if cookiecutter.use_huey == "yes" %}
+            docker compose restart huey
+            {%- endif %}
+            {%- endif %}
+
+            echo "Staging Deployment Pipeline Complete!"
   {%- endif %}

@@ -46,9 +46,10 @@ FROM python:3.12-slim-bookworm AS production
 WORKDIR /app
 
 # Install runtime dependencies (e.g. curl for healthcheck)
-RUN apt-get update && \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
     apt-get install -y --no-install-recommends curl && \
-    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=prod-builder /venv /venv
