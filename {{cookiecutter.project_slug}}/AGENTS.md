@@ -8,9 +8,9 @@ This document provides operational rules, architectural invariants, and verifica
 
 | Tier | Directives |
 | :--- | :--- |
-| **Always** | Run scoped checks during iteration; write behavior-driven tests alongside code; satisfy the Definition of Done before finishing. |
+| **Always** | Encapsulate all API transport logic (views, serializers, filters, endpoint routing) inside an `<app>/api/` package; run scoped checks during iteration; write behavior-driven tests alongside code; satisfy the Definition of Done before finishing. |
 | **Ask First** | Adding dependencies (`pyproject.toml`); altering settings or auth/permission rules; creating destructive migrations. |
-| **Never** | Edit already-applied migrations; edit/overwrite `.env` or commit secrets; run `manage.py dev` synchronously as a blocking command; commit or push git changes unless explicitly asked. |
+| **Never** | Create flat `views.py`, `serializers.py`, or endpoint `urls.py` at the app root level; edit already-applied migrations; edit/overwrite `.env` or commit secrets; run `manage.py dev` synchronously as a blocking command; commit or push git changes unless explicitly asked. |
 
 ---
 
@@ -33,23 +33,53 @@ This document provides operational rules, architectural invariants, and verifica
 
 ## 3. Architecture & Domain Rules
 
-### 3.1 Service Layer Invariant
+### 3.1 App Package Layout & Invariants
+Every app exposing HTTP/REST endpoints must isolate transport logic within an `api/` sub-package. Creating flat `views.py`, `serializers.py`, or endpoint `urls.py` at the app root is strictly forbidden:
+
+```
+<app_name>/
+├── api/                     # HTTP transport layer
+│   ├── __init__.py
+│   ├── views.py             # Thin views (auth/permissions, call services)
+│   ├── serializers.py       # Payload validation & serialization only
+│   ├── urls.py              # Endpoint routing
+│   └── filters.py           # django-filter backends (when applicable)
+├── services/                # Pure business logic layer
+│   ├── __init__.py
+│   └── <name>_service.py    # Zero HTTP request objects
+├── tests/
+│   ├── __init__.py
+│   ├── test_api.py          # API & transport tests
+│   ├── test_models.py       # Model & constraint tests
+│   └── test_services.py     # Domain service tests
+├── factories.py             # Factory Boy fixtures
+├── models.py                # Database schema only
+├── admin.py
+└── apps.py
+```
+
+**Dependency Flow Rules:**
+- `api/` $\rightarrow$ imports from `services/` and `models.py`.
+- `services/` $\rightarrow$ imports from `models.py`, but **never** imports from `api/`.
+- `models.py` $\rightarrow$ **never** imports from `services/` or `api/`.
+
+### 3.2 Service Layer Invariant
 - **Business logic belongs strictly in `services/`** (e.g., `user_service.py`), NOT in views, serializers, or models.
 - **No `request` in services**: Never pass the HTTP `request` object into service functions. Accept typed primitives, domain dataclasses, or model instances to keep services reusable across API views, background workers, and management commands.
 - **Views (`api/views.py`)**: Pure HTTP transport layer. Extract parameters, verify permissions (`permission_classes`), validate input with serializers, call domain services, and return standard HTTP status codes (`200`, `201`, `204`, `400`, `401`, `403`, `404`).
 - **Serializers (`api/serializers.py`)**: Format translation and payload validation only. Never trigger emails, external API calls, or background tasks in `serializer.save()`.
 
 {%- if cookiecutter.use_huey == "yes" %}
-### 3.2 Huey Tasks & The `transaction.on_commit` Invariant
+### 3.3 Huey Tasks & The `transaction.on_commit` Invariant
 - Background tasks live in `tasks.py` within each domain app and **must be idempotent**.
 - **Critical Gotcha**: When dispatching background tasks from inside an atomic database block (`@transaction.atomic`), **always** enqueue using `transaction.on_commit(lambda: my_task(...))` to prevent race conditions where workers execute before the database transaction has committed.
 {%- endif %}
 
-### 3.3 Signals Anti-Pattern
+### 3.4 Signals Anti-Pattern
 - **Never use Django signals for core business workflows** (no emails, user creation, or status changes in `post_save`). Signals obscure control flow and trigger unpredictably during testing, bulk queries, and migrations.
 - Signals are reserved strictly for decoupled infrastructure hooks (e.g., cache invalidation on save, deleting files on disk via `post_delete`).
 
-### 3.4 Custom User & Model Invariants
+### 3.5 Custom User & Model Invariants
 - Never import `User` directly across apps. Always use `from django.contrib.auth import get_user_model; User = get_user_model()` in code and `settings.AUTH_USER_MODEL` in model foreign keys.
 - **Financial / Critical Data**: Always use `Decimal` (never `float`) for monetary amounts and currency fields. Enforce audit trails and idempotent mutations on state-changing operations.
 
@@ -85,18 +115,59 @@ This document provides operational rules, architectural invariants, and verifica
 
 ---
 
-## 7. Git & PR Conventions
-
-- **Branch Naming**: `feat/<topic>`, `fix/<topic>`, `refactor/<topic>`.
-- **Commit Messages**: Conventional Commits (`feat: ...`, `fix: ...`, `test: ...`, `refactor: ...`, `chore: ...`).
-- **Agent Rule**: Do not run `git commit` or `git push` unless explicitly asked by the user.
-
----
-
-## 8. Definition of Done
+## 7. Definition of Done
 
 Before declaring any task complete, verify:
 
-1. **Code Quality**: `uv run pre-commit run --all-files` passes with 0 errors.
-2. **Migrations Check**: `uv run python manage.py makemigrations --check --dry-run` passes.
-3. **Test Suite**: `uv run pytest` passes 100% with zero regressions.
+1. **Package Invariant Check**: All API transport files (views, serializers, URLs) reside in `<app>/api/` packages. No flat `views.py` or `serializers.py` exist at app root level.
+2. **Code Quality**: `uv run pre-commit run --all-files` passes with 0 errors.
+3. **Migrations Check**: `uv run python manage.py makemigrations --check --dry-run` passes.
+4. **Test Suite**: `uv run pytest` passes 100% with zero regressions.
+
+---
+
+## 8. Git Commits
+
+### When to commit
+- Commit only when explicitly asked. Never push, amend, rebase, or force-push unless asked.
+- Before committing, complete the Section 7 checklist. Never bypass hooks with `--no-verify`.
+
+### What goes into a commit
+- **One logical change per commit.** If a task touches unrelated things (a bug fix and a refactor), make separate commits.
+- **Stage explicit paths.** Never use `git add .` or `git add -A`. Review `git status` and `git diff --staged` before committing.
+- **Keep together, in the same commit:**
+  - A model change and its generated migration.
+  - A behavior change and its tests.
+  - A dependency change in `pyproject.toml` and the updated `uv.lock`.
+  - A new environment variable and its `.env.example` (and `.env.test` if needed) entry.
+- **Never commit:** `.env`, local databases (`db.sqlite3`), `.venv/`, `__pycache__/`, coverage output, uploaded media, editor files, or anything containing secrets.
+- **No drive-by changes.** If `ruff format` reformats files unrelated to the task, revert those files or put them in a separate `style:` commit.
+- Never edit a migration that has already been committed or applied. Create a new one.
+
+### Message format
+```
+<type>(<scope>): <subject>
+
+<body: what changed and why, wrapped at 72 chars>
+
+<footer: issue refs, BREAKING CHANGE>
+```
+
+- **Branch Naming**: `feat/<topic>`, `fix/<topic>`, `refactor/<topic>`.
+- **Types:** `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `build`, `ci`, `perf`, `style`.
+- **Scope:** the app or area, e.g. `accounts`, `config`, `deps`.
+- **Subject:** imperative mood ("add", not "added"), lowercase, no trailing period, 50 characters or fewer.
+- **Body:** optional for trivial changes. Otherwise explain *why*, not what. The diff already shows what.
+- **Breaking changes:** add a `BREAKING CHANGE:` footer describing the migration path.
+
+Examples:
+```
+feat(accounts): add email verification service
+
+Move verification logic out of the serializer so it can be reused
+by the management command and the Huey task.
+
+fix(accounts): prevent duplicate users on case-differing emails
+
+chore(deps): bump djangorestframework to 3.16
+```
