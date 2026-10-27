@@ -72,7 +72,7 @@ cp .env.example .env
 uv sync
 uv run python manage.py migrate
 uv run python manage.py createsuperuser
-uv run python manage.py runserver
+uv run python manage.py dev
 ```
 
 ## Configuration Options
@@ -103,14 +103,34 @@ During project generation, you'll be prompted for the following:
 ```
 your-project/
 ├── config/                    # Django settings and configuration
-│   ├── settings.py           # Main settings with environment-based config
+│   ├── settings/             # Environment-based settings package
+│   │   ├── __init__.py       # Dynamic environment resolver
+│   │   ├── base.py           # Shared base settings
+│   │   ├── local.py          # Local development settings
+│   │   ├── prod.py           # Production settings
+│   │   └── test.py           # High-speed isolated test settings
 │   ├── urls.py               # Root URL configuration
 │   ├── asgi.py               # ASGI application
 │   └── wsgi.py               # WSGI application
-├── accounts/                  # Custom user model (optional)
-│   ├── models.py             # Email-based User model
-│   ├── admin.py
-│   └── tests/
+├── accounts/                  # Modular app structure (optional)
+│   ├── models.py             # User models and managers
+│   ├── admin.py              # Django admin registration
+│   ├── apps.py               # App configuration
+│   ├── urls.py               # App routing (delegates to api.urls)
+│   ├── api/                  # Dedicated REST API module
+│   │   ├── __init__.py
+│   │   ├── serializers.py    # DRF serializers
+│   │   ├── views.py          # DRF views and viewsets
+│   │   └── urls.py           # API endpoint routing
+│   ├── services/             # Domain and business logic
+│   │   ├── __init__.py
+│   │   └── user_service.py   # Domain operations
+│   ├── factories.py          # Factory-boy test factories
+│   └── tests/                # Modular test suite
+│       ├── __init__.py
+│       ├── test_models.py    # Model unit tests
+│       ├── test_services.py  # Service layer tests
+│       └── test_api.py       # API and serializer tests
 ├── .nginx/                    # Nginx configuration (if Docker enabled)
 ├── data/                      # Local data directory (SQLite, Huey)
 ├── Dockerfile                 # Multi-stage Docker build (if Docker enabled)

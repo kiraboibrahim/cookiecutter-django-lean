@@ -10,22 +10,22 @@ class UserManager(BaseUserManager):
     """Custom user manager for email-based authentication."""
 
     def create_user(
-        self, 
-        email: str, 
-        password: str | None = None, 
+        self,
+        email: str,
+        password: str | None = None,
         **extra_fields: Any
     ) -> "User":
         """
         Create and save a regular user.
-        
+
         Args:
             email: User's email address (used for authentication)
             password: User's password (will be hashed)
             **extra_fields: Additional fields for the user model
-            
+
         Returns:
             The created User instance
-            
+
         Raises:
             ValueError: If email is not provided
         """
@@ -38,22 +38,22 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(
-        self, 
-        email: str, 
-        password: str | None = None, 
+        self,
+        email: str,
+        password: str | None = None,
         **extra_fields: Any
     ) -> "User":
         """
         Create and save a superuser.
-        
+
         Args:
             email: Superuser's email address
             password: Superuser's password (will be hashed)
             **extra_fields: Additional fields for the user model
-            
+
         Returns:
             The created superuser instance
-            
+
         Raises:
             ValueError: If is_staff or is_superuser are not True
         """

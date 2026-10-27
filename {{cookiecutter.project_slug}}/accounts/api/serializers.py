@@ -1,3 +1,6 @@
+"""
+Serializers for accounts API.
+"""
 from dj_rest_auth.serializers import LoginSerializer as DJRestAuthLoginSerializer
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
@@ -7,6 +10,8 @@ User = get_user_model()
 
 
 class LoginSerializer(DJRestAuthLoginSerializer):
+    """Custom login serializer requiring email and password."""
+
     email = serializers.EmailField(
         required=True,
         error_messages={
@@ -33,9 +38,9 @@ class LoginSerializer(DJRestAuthLoginSerializer):
             ) from None
 
 
-class UserDetailsSerializer(serializers.ModelSerializer):
+class UserSerializer(serializers.ModelSerializer):
     """
-    Serializer for the user detail view (e.g., /api/v1/auth/user/).
+    Serializer for user details.
     """
 
     class Meta:

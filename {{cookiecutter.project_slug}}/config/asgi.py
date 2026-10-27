@@ -1,5 +1,5 @@
 """
-ASGI config for best_seller project.
+ASGI config for {{ cookiecutter.project_name }} project.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 

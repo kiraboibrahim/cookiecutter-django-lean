@@ -102,8 +102,8 @@ uv run python manage.py migrate
 # 7. Create superuser
 uv run python manage.py createsuperuser
 
-# 8. Run development server
-uv run python manage.py runserver
+# 8. Run development server (starts Django + Huey worker concurrently)
+uv run python manage.py dev
 ```
 
 ## Prerequisites
@@ -391,15 +391,35 @@ uv run python manage.py shell
 ```
 {{ cookiecutter.project_slug }}/
 ├── config/                 # Django settings and configuration
-│   ├── settings.py        # Main settings file
+│   ├── settings/          # Environment-based settings package
+│   │   ├── __init__.py    # Dynamic environment resolver
+│   │   ├── base.py        # Shared base settings
+│   │   ├── local.py       # Local development settings
+│   │   ├── prod.py        # Production settings
+│   │   └── test.py        # High-speed isolated test settings
 │   ├── urls.py            # Root URL configuration
 │   ├── asgi.py            # ASGI application
 │   └── wsgi.py            # WSGI application
 {%- if cookiecutter.include_accounts_app == "yes" %}
-├── accounts/              # Custom user model
+├── accounts/              # Modular user management app
 │   ├── models.py          # User model with email authentication
-│   ├── admin.py
-│   └── tests/
+│   ├── admin.py           # Admin configuration
+│   ├── apps.py            # App configuration
+│   ├── urls.py            # App-level routing (delegates to api.urls)
+│   ├── api/               # Dedicated REST API module
+│   │   ├── __init__.py
+│   │   ├── serializers.py # DRF serializers
+│   │   ├── views.py       # DRF views and viewsets
+│   │   └── urls.py        # API endpoint routing
+│   ├── services/          # Domain and business logic
+│   │   ├── __init__.py
+│   │   └── user_service.py # Domain services
+│   ├── factories.py       # Factory-boy test factories
+│   └── tests/             # Modular test suite
+│       ├── __init__.py
+│       ├── test_models.py # Model unit tests
+│       ├── test_services.py # Service layer tests
+│       └── test_api.py    # API and serializer tests
 {%- endif %}
 {%- if cookiecutter.use_docker == "yes" %}
 ├── .nginx/                # Nginx configuration

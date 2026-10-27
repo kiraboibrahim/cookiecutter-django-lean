@@ -146,30 +146,35 @@ def remove_unused_vcs_files() -> None:
 
 def generate_env_test() -> None:
     """
-    Generate .env.test file based on required variables in settings.py.
+    Generate .env.test file based on required variables in settings.
     """
     print_info("Generating .env.test...")
-    settings_path = Path("config/settings.py")
+    settings_files = []
+    settings_dir = Path("config/settings")
+    if settings_dir.exists() and settings_dir.is_dir():
+        settings_files = list(settings_dir.glob("*.py"))
+    elif Path("config/settings.py").exists():
+        settings_files = [Path("config/settings.py")]
+
     env_example_path = Path(".env.example")
     env_test_path = Path(".env.test")
 
-    if not settings_path.exists():
-        print_warning("config/settings.py not found, skipping .env.test generation")
+    if not settings_files:
+        print_warning("No settings files found, skipping .env.test generation")
         return
 
-    # 1. Identify required variables from settings.py (config calls without defaults)
+    # 1. Identify required variables from settings files (config calls without defaults)
     import re
     required_vars = []
-    with open(settings_path, "r") as f:
-        content = f.read()
-        # Find matches like: config("VAR_NAME") or config('VAR_NAME')
-        # ensuring no 'default=' is present in the call
-        matches = re.finditer(r'config\(\s*["\']([^"\']+)["\']\s*(?:,[^)]*)?\)', content)
-        for match in matches:
-            full_call = match.group(0)
-            var_name = match.group(1)
-            if "default=" not in full_call:
-                required_vars.append(var_name)
+    for s_file in settings_files:
+        with open(s_file, "r") as f:
+            content = f.read()
+            matches = re.finditer(r'config\(\s*["\']([^"\']+)["\']\s*(?:,[^)]*)?\)', content)
+            for match in matches:
+                full_call = match.group(0)
+                var_name = match.group(1)
+                if "default=" not in full_call and var_name not in required_vars:
+                    required_vars.append(var_name)
 
     # 2. Extract values from .env.example if available
     example_values = {}
@@ -205,14 +210,17 @@ def generate_env_test() -> None:
     print_success(".env.test generated successfully")
 
 
-def initialize_git() -> None:
-    """Initialize git repository with initial commit."""
+def git_init() -> bool:
+    """Initialize git repository."""
     print_info("Initializing git repository...")
     if not run_command("git init", "Failed to initialize git"):
-        return
-    
+        return False
     print_success("Git repository initialized")
-    
+    return True
+
+
+def git_commit_initial() -> None:
+    """Stage all generated files and create initial commit."""
     if run_command("git add .", "Failed to stage files"):
         run_command(
             'git commit -m "Initial commit from cookiecutter-django-lean template"',
@@ -244,7 +252,7 @@ def setup_uv() -> bool:
         print_success(f"Python {PYTHON_VERSION} pinned (.python-version created)")
     
     print_info("Installing dependencies...")
-    if run_command("uv sync", "Failed to install dependencies"):
+    if run_command("uv sync --extra dev --extra test", "Failed to install dependencies"):
         print_success("Dependencies installed successfully")
         return True
     return False
@@ -306,8 +314,8 @@ def print_next_steps() -> None:
     print("5. Create a superuser:")
     print("   uv run python manage.py createsuperuser\n")
     
-    print("6. Run the development server:")
-    print("   uv run python manage.py runserver\n")
+    print("6. Run the development server (runs Django + Huey worker):")
+    print("   uv run python manage.py dev\n")
     
     print("7. Run tests:")
     print("   uv run pytest\n")
@@ -330,22 +338,27 @@ def main() -> None:
     print(f"\n{BLUE}{'=' * 60}{RESET}")
     print(f"{BLUE}Post-generation setup for '{PROJECT_SLUG}'{RESET}")
     print(f"{BLUE}{'=' * 60}{RESET}\n")
-    
+
     remove_unselected_apps()
     remove_docker_files()
     remove_unused_vcs_files()
-    initialize_git()
+    git_init()
     create_env_file()
     generate_env_test()
-    
+
     uv_success = setup_uv()
-    
+
     if uv_success:
         setup_pre_commit()
         create_migrations()
+        print_info("Formatting code with ruff...")
+        run_command("uv run ruff check --fix .", "Failed to lint with ruff")
+        run_command("uv run ruff format .", "Failed to format with ruff")
+        print_success("Code formatted successfully")
     else:
         print_warning("Skipping pre-commit and migrations setup due to uv issues")
-    
+
+    git_commit_initial()
     print_next_steps()
 
 
