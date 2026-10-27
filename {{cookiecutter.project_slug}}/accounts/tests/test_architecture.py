@@ -4,6 +4,7 @@ Architectural invariant tests enforcing clean layer separation and package layou
 
 import ast
 from pathlib import Path
+
 from django.conf import settings
 
 FORBIDDEN_APP_ROOT_FILES = {
@@ -70,24 +71,21 @@ def test_dependency_flow_invariants():
             tree = ast.parse(models_file.read_text(), filename=str(models_file))
             for node in ast.walk(tree):
                 if isinstance(node, ast.ImportFrom) and node.module:
-                    assert ".services" not in node.module and not node.module.endswith(
-                        "services"
-                    ), (
-                        f"Architecture violation in '{models_file}': models must never import from services."
-                    )
-                    assert ".api" not in node.module and not node.module.endswith(
-                        "api"
-                    ), (
-                        f"Architecture violation in '{models_file}': models must never import from api."
-                    )
+                    assert (
+                        ".services" not in node.module
+                        and not node.module.endswith("services")
+                    ), f"Architecture violation in '{models_file}': models must never import from services."
+                    assert (
+                        ".api" not in node.module and not node.module.endswith("api")
+                    ), f"Architecture violation in '{models_file}': models must never import from api."
                 elif isinstance(node, ast.Import):
                     for alias in node.names:
-                        assert "services" not in alias.name.split("."), (
-                            f"Architecture violation in '{models_file}': models must never import from services."
-                        )
-                        assert "api" not in alias.name.split("."), (
-                            f"Architecture violation in '{models_file}': models must never import from api."
-                        )
+                        assert (
+                            "services" not in alias.name.split(".")
+                        ), f"Architecture violation in '{models_file}': models must never import from services."
+                        assert (
+                            "api" not in alias.name.split(".")
+                        ), f"Architecture violation in '{models_file}': models must never import from api."
 
         # Check services/ package
         services_dir = app_path / "services"
@@ -96,24 +94,23 @@ def test_dependency_flow_invariants():
                 tree = ast.parse(py_file.read_text(), filename=str(py_file))
                 for node in ast.walk(tree):
                     if isinstance(node, ast.ImportFrom) and node.module:
-                        assert ".api" not in node.module and not node.module.endswith(
-                            "api"
-                        ), (
-                            f"Architecture violation in '{py_file}': services must never import from api."
-                        )
-                        assert "rest_framework.request" not in node.module, (
-                            f"Architecture violation in '{py_file}': services must never import Request objects."
-                        )
+                        assert (
+                            ".api" not in node.module
+                            and not node.module.endswith("api")
+                        ), f"Architecture violation in '{py_file}': services must never import from api."
+                        assert (
+                            "rest_framework.request" not in node.module
+                        ), f"Architecture violation in '{py_file}': services must never import Request objects."
                         if node.module == "django.http":
                             for alias in node.names:
-                                assert "HttpRequest" not in alias.name, (
-                                    f"Architecture violation in '{py_file}': services must never import HttpRequest."
-                                )
+                                assert (
+                                    "HttpRequest" not in alias.name
+                                ), f"Architecture violation in '{py_file}': services must never import HttpRequest."
                     elif isinstance(node, ast.Import):
                         for alias in node.names:
-                            assert "api" in alias.name.split(".") is False, (
-                                f"Architecture violation in '{py_file}': services must never import from api."
-                            )
-                            assert alias.name != "rest_framework.request", (
-                                f"Architecture violation in '{py_file}': services must never import Request objects."
-                            )
+                            assert (
+                                "api" in alias.name.split(".") is False
+                            ), f"Architecture violation in '{py_file}': services must never import from api."
+                            assert (
+                                alias.name != "rest_framework.request"
+                            ), f"Architecture violation in '{py_file}': services must never import Request objects."
