@@ -222,10 +222,16 @@ def git_init() -> bool:
 def git_commit_initial() -> None:
     """Stage all generated files and create initial commit."""
     if run_command("git add .", "Failed to stage files"):
-        run_command(
+        # If pre-commit hooks make changes during the commit, re-stage and complete the commit
+        if not run_command(
             'git commit -m "Initial commit from cookiecutter-django-lean template"',
-            "Failed to create initial commit"
-        )
+            "Initial commit hooks pass"
+        ):
+            run_command("git add .", "Failed to re-stage pre-commit changes")
+            run_command(
+                'git commit -m "Initial commit from cookiecutter-django-lean template"',
+                "Failed to create initial commit"
+            )
         print_success("Initial commit created")
 
 
